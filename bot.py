@@ -27,10 +27,21 @@ import requests
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
 
+# Load .env file if it exists (for local development)
+if os.path.exists(".env"):
+    with open(".env", "r") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                key = key.strip()
+                if key not in os.environ:
+                    os.environ[key] = val.strip().strip('"').strip("'")
+
 # ---------------------------------------------------------------- config
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 AIPIPE_TOKEN = os.environ.get("AIPIPE_TOKEN", "")
-MODEL = os.environ.get("MODEL", "gpt-4o-mini")
+MODEL = os.environ.get("MODEL", "gpt-4o")
 MODEL_BASE_URL = os.environ.get("MODEL_BASE_URL", "https://aipipe.org/openai/v1")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 LOG_PATH = os.environ.get("LOG_PATH", "/tmp/run.jsonl")
@@ -194,7 +205,7 @@ def solve(chat_id: int, question: str) -> str:
             log_event(event="llm_error", chat_id=chat_id, error=str(e))
             time.sleep(2)
             try:
-                msg = chat_completion(messages, use_tools=True)
+                msg = chat_completion(messages, use_tools=not out_of_time)
             except Exception as e2:
                 log_event(event="llm_error_final", chat_id=chat_id, error=str(e2))
                 break
@@ -287,6 +298,9 @@ app = FastAPI()
 
 @app.on_event("startup")
 def _start():
+    log_dir = os.path.dirname(os.path.abspath(LOG_PATH))
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
     if not os.path.exists(LOG_PATH):
         log_event(event="log_created")
     threading.Thread(target=poll_loop, daemon=True).start()
