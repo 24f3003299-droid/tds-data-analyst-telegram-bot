@@ -1,4 +1,4 @@
-"""Data-analyst Telegram bot — TDS Project 1.
+"""Data-analyst Telegram bot — TDS Project 1
 
 An LLM agent that answers data-analysis questions sent over Telegram.
 Replies to every message with exactly one JSON object:
