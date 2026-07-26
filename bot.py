@@ -39,12 +39,17 @@ if os.path.exists(".env"):
                     os.environ[key] = val.strip().strip('"').strip("'")
 
 # ---------------------------------------------------------------- config
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-AIPIPE_TOKEN = os.environ.get("AIPIPE_TOKEN", "")
-MODEL = os.environ.get("MODEL", "gpt-4o")
-MODEL_BASE_URL = os.environ.get("MODEL_BASE_URL", "https://aipipe.org/openai/v1")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
-LOG_PATH = os.environ.get("LOG_PATH", "/tmp/run.jsonl")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+AIPIPE_TOKEN = os.environ.get("AIPIPE_TOKEN", "").strip()
+MODEL = os.environ.get("MODEL", "gpt-4o").strip()
+MODEL_BASE_URL = os.environ.get("MODEL_BASE_URL", "https://aipipe.org/openai/v1").strip()
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").strip().rstrip("/")
+LOG_PATH = os.environ.get("LOG_PATH", "/tmp/run.jsonl").strip()
 LOG_URL = f"{BASE_URL}/run.jsonl"
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -126,21 +131,42 @@ Rules:
 
 # ---------------------------------------------------------------- llm
 def chat_completion(messages, use_tools=True):
-    body = {"model": MODEL, "messages": messages, "temperature": 0}
-    if use_tools:
-        body["tools"] = TOOLS
-    r = requests.post(
-        f"{MODEL_BASE_URL}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {AIPIPE_TOKEN}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (data-analyst-bot)",
-        },
-        json=body,
-        timeout=180,
-    )
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]
+    try:
+        body = {"model": MODEL, "messages": messages, "temperature": 0}
+        if use_tools:
+            body["tools"] = TOOLS
+        r = requests.post(
+            f"{MODEL_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {AIPIPE_TOKEN}",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (data-analyst-bot)",
+            },
+            json=body,
+            timeout=180,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]
+    except Exception as e:
+        if GROQ_API_KEY:
+            log_event(event="aipipe_failed_falling_back_to_groq", error=str(e))
+            body = {"model": GROQ_MODEL, "messages": messages, "temperature": 0}
+            if use_tools:
+                body["tools"] = TOOLS
+            r = requests.post(
+                f"{GROQ_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (data-analyst-bot)",
+                },
+                json=body,
+                timeout=180,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]
+        else:
+            raise e
 
 
 def extract_json(text: str):
